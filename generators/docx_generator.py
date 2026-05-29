@@ -96,7 +96,8 @@ class DOCXGenerator:
                     level=2
                 )
                 objectives = (
-                    llm.get("objectives_refinement")
+                    llm.get("objectives")
+                    or llm.get("objectives_refinement")
                     or self.semantic_engine.generate_objectives_summary(program)
                 )
 
@@ -134,26 +135,20 @@ class DOCXGenerator:
         # =====================================================
         # 2. DATABASE DETAILS
         # =====================================================
-        db_summary = (
-            self.semantic_engine.generate_database_summary(program)
-        )
-        doc.add_paragraph(db_summary)
-
-        if enabled.get(
-            "database_details"
+        if (
+            enabled.get("database_details")
+            or enabled.get("ims_segments")
+            or enabled.get("idms_records")
         ):
-            doc.add_heading(
-                "2. Database Details",
-                level=1
+            doc.add_heading("2. Database Details", level=1)
+            doc.add_paragraph(
+                self.semantic_engine.generate_database_summary(program)
             )
 
             if enabled.get(
                 "db2_tables"
             ):
-                doc.add_heading(
-                    "2.1 DB2 Tables",
-                    level=2
-                )
+                doc.add_heading("2.1 DB2 Tables", level=2)
 
                 if program.sql_blocks:
                     for sql in program.sql_blocks:
@@ -166,6 +161,19 @@ class DOCXGenerator:
                     doc.add_paragraph(
                         "No DB2 usage detected."
                     )
+            else:
+                doc.add_heading("2.1 DB2 Tables", level=2)
+                doc.add_paragraph("No DB2 usage detected.")
+
+            doc.add_heading("2.2 IMS Segments", level=2)
+            doc.add_paragraph(
+                "No IMS segments detected from parser-visible source."
+            )
+
+            doc.add_heading("2.3 IDMS Records", level=2)
+            doc.add_paragraph(
+                "No IDMS records detected from parser-visible source."
+            )
 
         # =====================================================
         # 3. SYSTEM ARCHITECTURE
@@ -201,10 +209,7 @@ class DOCXGenerator:
             if enabled.get(
                 "component_diagram"
             ):
-                doc.add_heading(
-                    "3.1 Components",
-                    level=2
-                )
+                doc.add_heading("3.1 Component Diagram", level=2)
 
                 components = set()
 
@@ -234,10 +239,7 @@ class DOCXGenerator:
 
                 doc.add_paragraph(flow_summary)
 
-                doc.add_heading(
-                    "3.2 Control Flow",
-                    level=2
-                )
+                doc.add_heading("3.2 Control Flow Diagram", level=2)
 
                 # Flow summary
                 doc.add_paragraph(

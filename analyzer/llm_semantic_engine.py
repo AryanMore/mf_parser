@@ -52,15 +52,30 @@ class LLMSemanticEngine:
         end = cleaned.rfind("}")
 
         if start == -1 or end == -1:
-            print("No JSON object found.")
-            return {}
+            print("No JSON object found. Retrying with JSON repair prompt...")
+            repaired = self._repair_to_json(raw)
+
+            if not repaired:
+                print("JSON repair failed.")
+                return {}
+
+            cleaned = repaired
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+
+            if start == -1 or end == -1:
+                print("No JSON object found after repair.")
+                return {}
 
         json_body = cleaned[start:end + 1]
 
         try:
             parsed = json.loads(json_body)
             required_keys = [
-                "objectives_refinement",
+                "program_overview",
+                "objectives",
+                "scope",
+                "assumptions_constraints",
                 "architecture_refinement",
                 "structure_refinement",
                 "algorithm_refinement",
@@ -71,6 +86,14 @@ class LLMSemanticEngine:
 
             for key in required_keys:
                 parsed.setdefault(key, "")
+
+            # Backward compatibility with older key names
+            if not parsed["objectives"] and parsed.get("objectives_refinement"):
+                parsed["objectives"] = parsed["objectives_refinement"]
+            if not parsed["structure_refinement"] and parsed.get("program_structure"):
+                parsed["structure_refinement"] = parsed["program_structure"]
+            if not parsed["algorithm_refinement"] and parsed.get("algorithms"):
+                parsed["algorithm_refinement"] = parsed["algorithms"]
             return parsed
 
         except Exception as e:
@@ -156,6 +179,10 @@ CRITICAL OUTPUT RULES:
 
 Exact JSON schema:
 {{
+  "program_overview": "string",
+  "objectives": "string",
+  "scope": "string",
+  "assumptions_constraints": "string",
   "objectives_refinement": "string",
   "architecture_refinement": "string",
   "structure_refinement": "string",
@@ -179,6 +206,7 @@ FACTS:
         try:
             response = ollama.chat(
                 model=self.model,
+                format="json",
                 messages=[
                     {
                         "role": "user",
@@ -197,4 +225,49 @@ FACTS:
             print(
                 f"Ollama failed: {e}"
             )
+            return ""
+
+    def _repair_to_json(
+        self,
+        raw_output: str
+    ):
+        repair_prompt = f"""
+Convert the following text into valid JSON only.
+No markdown, no explanation, no backticks.
+Every value must be a JSON string.
+
+Required keys:
+- program_overview
+- objectives
+- scope
+- assumptions_constraints
+- architecture_refinement
+- structure_refinement
+- algorithm_refinement
+- business_logic
+- program_walkthrough
+- paragraph_explanations
+
+Text:
+{raw_output}
+"""
+        try:
+            response = ollama.chat(
+                model=self.model,
+                format="json",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": repair_prompt
+                    }
+                ]
+            )
+
+            return (
+                response["message"]
+                ["content"]
+                .strip()
+            )
+        except Exception as e:
+            print(f"Ollama JSON repair failed: {e}")
             return ""

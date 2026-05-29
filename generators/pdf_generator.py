@@ -24,6 +24,7 @@ class PDFGenerator:
         self,
         output_dir: str = "output"
     ):
+        self.semantic_engine = SemanticEngine()
         self.output_dir = output_dir
         os.makedirs(
             self.output_dir,
@@ -110,7 +111,7 @@ class PDFGenerator:
                     Paragraph(
                         llm.get(
                             "program_overview",
-                            program.summary
+                            self.semantic_engine.generate_program_overview(program)
                         ),
                         styles["Normal"]
                     )
@@ -133,7 +134,7 @@ class PDFGenerator:
                     Paragraph(
                         llm.get(
                             "objectives",
-                            "Objectives inferred from structural analysis."
+                            self.semantic_engine.generate_objectives_summary(program)
                         ),
                         styles["Normal"]
                     )
@@ -156,7 +157,7 @@ class PDFGenerator:
                     Paragraph(
                         llm.get(
                             "scope",
-                            "Scope derived from parsed files, calls, and dependencies."
+                            self.semantic_engine.generate_scope_summary(program)
                         ),
                         styles["Normal"]
                     )
@@ -179,7 +180,7 @@ class PDFGenerator:
                     Paragraph(
                         llm.get(
                             "assumptions_constraints",
-                            "Only parser-visible source code was analyzed."
+                            self.semantic_engine.generate_constraints_summary(program)
                         ),
                         styles["Normal"]
                     )
@@ -191,8 +192,10 @@ class PDFGenerator:
         # =====================================================
         # 2. DATABASE DETAILS
         # =====================================================
-        if enabled.get(
-            "database_details"
+        if (
+            enabled.get("database_details")
+            or enabled.get("ims_segments")
+            or enabled.get("idms_records")
         ):
             story.append(
                 Paragraph(
@@ -201,9 +204,7 @@ class PDFGenerator:
                 )
             )
 
-            if enabled.get(
-                "db2_tables"
-            ):
+            if enabled.get("db2_tables"):
                 story.append(
                     Paragraph(
                         "<b>2.1 DB2 Tables</b>",
@@ -228,9 +229,28 @@ class PDFGenerator:
                         )
                     )
 
+            else:
                 story.append(
-                    Spacer(1, 14)
+                    Paragraph("No DB2 usage detected.", styles["Normal"])
                 )
+
+            story.append(Spacer(1, 10))
+            story.append(Paragraph("<b>2.2 IMS Segments</b>", styles["Heading2"]))
+            story.append(
+                Paragraph(
+                    "No IMS segments detected from parser-visible source.",
+                    styles["Normal"]
+                )
+            )
+            story.append(Spacer(1, 10))
+            story.append(Paragraph("<b>2.3 IDMS Records</b>", styles["Heading2"]))
+            story.append(
+                Paragraph(
+                    "No IDMS records detected from parser-visible source.",
+                    styles["Normal"]
+                )
+            )
+            story.append(Spacer(1, 14))
 
         # =====================================================
         # 3. SYSTEM ARCHITECTURE
@@ -251,7 +271,19 @@ class PDFGenerator:
             ):
                 story.append(
                     Paragraph(
-                        "<b>3.1 Components</b>",
+                        llm.get(
+                            "architecture_refinement",
+                            self.semantic_engine.generate_architecture_summary(program)
+                        ),
+                        styles["Normal"]
+                    )
+                )
+                story.append(
+                    Spacer(1, 10)
+                )
+                story.append(
+                    Paragraph(
+                        "<b>3.1 Component Diagram</b>",
                         styles["Heading2"]
                     )
                 )
@@ -284,7 +316,7 @@ class PDFGenerator:
             ):
                 story.append(
                     Paragraph(
-                        "<b>3.2 Control Flow</b>",
+                        "<b>3.2 Control Flow Diagram</b>",
                         styles["Heading2"]
                     )
                 )
@@ -359,6 +391,18 @@ class PDFGenerator:
                         styles["Heading2"]
                     )
                 )
+                story.append(
+                    Paragraph(
+                        llm.get(
+                            "structure_refinement",
+                            self.semantic_engine.generate_program_structure_summary(program)
+                        ),
+                        styles["Normal"]
+                    )
+                )
+                story.append(
+                    Spacer(1, 10)
+                )
 
                 for section in (
                     program.sections
@@ -385,8 +429,10 @@ class PDFGenerator:
                     )
                 )
                 algorithm_summary = (
-                    SemanticEngine()
-                    .generate_algorithm_summary(program)
+                    llm.get(
+                        "algorithm_refinement",
+                        self.semantic_engine.generate_algorithm_summary(program)
+                    )
                 )
 
                 story.append(

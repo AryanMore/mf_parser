@@ -5,9 +5,6 @@ from parser.cobol_parser import CobolParser
 from analyzer.flow_analyzer import FlowAnalyzer
 from analyzer.semantic_engine import SemanticEngine
 from analyzer.section_router import SectionRouter
-from analyzer.llm_semantic_engine import LLMSemanticEngine
-from analyzer.llm_validator import LLMValidator
-
 from generators.json_generator import JSONGenerator
 from generators.docx_generator import DOCXGenerator
 from generators.pdf_generator import PDFGenerator
@@ -56,9 +53,26 @@ class CobolComprehensionEngine:
         # -------------------------------
         # LLM pipeline
         # -------------------------------
+        self.llm_engine = None
+        self.validator = None
+
         if self.use_llm:
-            self.llm_engine = LLMSemanticEngine()
-            self.validator = LLMValidator()
+            try:
+                from analyzer.llm_semantic_engine import (
+                    LLMSemanticEngine
+                )
+                from analyzer.llm_validator import (
+                    LLMValidator
+                )
+
+                self.llm_engine = LLMSemanticEngine()
+                self.validator = LLMValidator()
+            except ModuleNotFoundError as e:
+                print(
+                    f"LLM mode disabled: missing dependency ({e}). "
+                    "Install required LLM packages (e.g., ollama) to enable --llm."
+                )
+                self.use_llm = False
 
         # -------------------------------
         # Generators
@@ -128,26 +142,30 @@ class CobolComprehensionEngine:
 
             print("Ollama returned.")
 
-            combined_text = "\n".join(
-                str(v)
-                for v in llm_sections.values()
-                if v
-            )
-
-            validation = self.validator.validate(
-                combined_text,
-                program
-            )
-
-            if validation["valid"]:
-                print("LLM intelligence validated.")
-                program.llm_sections = llm_sections
-            else:
-                print("LLM output rejected.")
-                print("Validation issues:")
-                for issue in validation["issues"]:
-                    print(f" - {issue}")
+            if not llm_sections:
+                print("LLM output rejected (empty or invalid JSON).")
                 program.llm_sections = {}
+            else:
+                combined_text = "\n".join(
+                    str(v)
+                    for v in llm_sections.values()
+                    if v
+                )
+
+                validation = self.validator.validate(
+                    combined_text,
+                    program
+                )
+
+                if validation["valid"]:
+                    print("LLM intelligence validated.")
+                    program.llm_sections = llm_sections
+                else:
+                    print("LLM output rejected.")
+                    print("Validation issues:")
+                    for issue in validation["issues"]:
+                        print(f" - {issue}")
+                    program.llm_sections = {}
 
         else:
             program.llm_sections = {}
